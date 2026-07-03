@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pencarian Data Karyawan Keluar - PT HopLun Indonesia</title>
+    <!-- Tailwind CSS untuk Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS untuk membaca file Excel/CSV -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar untuk tabel */
+        .table-container::-webkit-scrollbar { height: 8px; width: 8px; }
+        .table-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .table-container::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        .table-container::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen font-sans">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-brand-600 p-2 rounded-lg text-white">
+                    <i data-lucide="users"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-gray-900 leading-tight">Data Karyawan Keluar</h1>
+                    <p class="text-sm text-gray-500">PT HopLun Indonesia</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2 bg-brand-50 px-3 py-1.5 rounded-full border border-brand-100">
+                <i data-lucide="database" class="w-4 h-4 text-brand-600"></i>
+                <span id="dataCount" class="text-sm font-medium text-brand-700">0 Data Tersimpan</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+        <!-- Notifikasi -->
+        <div id="notification" class="hidden rounded-md p-4 mb-4 transition-all duration-300">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <i id="notifIcon" data-lucide="check-circle" class="h-5 w-5"></i>
+                </div>
+                <div class="ml-3">
+                    <p id="notifText" class="text-sm font-medium"></p>
+                </div>
+                <div class="ml-auto pl-3">
+                    <div class="-mx-1.5 -my-1.5">
+                        <button onclick="hideNotification()" class="inline-flex rounded-md p-1.5 focus:outline-none focus:ring-2 focus:ring-offset-2">
+                            <span class="sr-only">Dismiss</span>
+                            <i data-lucide="x" class="h-4 w-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Panel Kiri: Upload -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                            <i data-lucide="upload-cloud" class="w-5 h-5 text-gray-500"></i>
+                            Upload Data Baru
+                        </h2>
+                    </div>
+                    <div class="p-6">
+                        <p class="text-sm text-gray-600 mb-4">Upload file rekapan karyawan keluar (Format: .xlsx, .xls, .csv). Data akan disimpan di browser Anda.</p>
+                        
+                        <div class="flex items-center justify-center w-full">
+                            <label for="fileUpload" class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+                                <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                    <i data-lucide="file-spreadsheet" class="w-8 h-8 text-gray-400 mb-2"></i>
+                                    <p class="mb-1 text-sm text-gray-500 font-medium">Klik untuk pilih file</p>
+                                    <p class="text-xs text-gray-400">XLSX, XLSB, CSV</p>
+                                </div>
+                                <input id="fileUpload" type="file" class="hidden" accept=".xlsx, .xls, .csv, .xlsm, .xlsb" onchange="handleFileUpload(event)" />
+                            </label>
+                        </div>
+                        
+                        <div id="loadingIndicator" class="hidden mt-4 flex items-center justify-center gap-3 text-brand-600">
+                            <div class="loader"></div>
+                            <span class="text-sm font-medium text-brand-600">Memproses data... Mohon tunggu.</span>
+                        </div>
+
+                        <button onclick="clearData()" class="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm font-medium">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            Hapus Data Tersimpan
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Petunjuk Penggunaan -->
+                <div class="bg-blue-50 rounded-xl border border-blue-100 p-5">
+                    <h3 class="text-sm font-bold text-blue-900 mb-2 flex items-center gap-2">
+                        <i data-lucide="info" class="w-4 h-4"></i> Informasi
+                    </h3>
+                    <ul class="text-xs text-blue-800 space-y-2 list-disc pl-4">
+                        <li>Gunakan file rekapan standar. Pastikan baris pertama (Header) berisi judul kolom seperti NAME, ID NO, SR.</li>
+                        <li>Data Anda aman dan tidak dikirim ke server manapun (berjalan di browser lokal).</li>
+                        <li>Maksimal yang ditampilkan adalah 100 data teratas untuk menjaga kecepatan web. Gunakan pencarian spesifik.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Panel Kanan: Pencarian & Hasil -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Search Box -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-2">
+                    <div class="relative flex items-center">
+                        <i data-lucide="search" class="absolute left-4 w-5 h-5 text-gray-400"></i>
+                        <input type="text" id="searchInput" 
+                            class="w-full pl-12 pr-4 py-3 bg-transparent border-0 focus:ring-0 text-gray-900 placeholder-gray-400 text-lg outline-none" 
+                            placeholder="Ketik Nama, ID NO, atau No SR untuk mencari..." 
+                            onkeyup="handleSearch()"
+                            disabled>
+                    </div>
+                </div>
+
+                <!-- Table Box -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                    <div class="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                        <h2 class="text-lg font-semibold text-gray-800">Hasil Pencarian</h2>
+                        <span id="resultInfo" class="text-sm text-gray-500">Menunggu data...</span>
+                    </div>
+                    
+                    <div class="table-container overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">ID NO / SR</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Nama</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Bagian / Posisi</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Tgl Resign</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Alasan (Reason of Out)</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Prosedur</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody" class="bg-white divide-y divide-gray-200">
+                                <!-- Data will be injected here -->
+                                <tr>
+                                    <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                                        <div class="flex flex-col items-center justify-center">
+                                            <i data-lucide="database" class="w-12 h-12 text-gray-300 mb-3"></i>
+                                            <p>Belum ada data yang ditampilkan.</p>
+                                            <p class="text-sm mt-1">Silakan upload file Excel terlebih dahulu atau cari data.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Inisialisasi ikon
+        lucide.createIcons();
+
+        // Variabel global untuk menyimpan data karyawan
+        let employeeData = [];
+        const MAX_DISPLAY_RESULTS = 100; // Batasi tampilan agar browser tidak lag
+        const STORAGE_KEY = 'hopLunEmployeeData';
+
+        // NAMA FILE DEFAULT YANG AKAN DIMUAT OTOMATIS (Pastikan file ini ada di folder yang sama di GitHub)
+        const DEFAULT_FILE_URL = './data_karyawan.xlsx';
+
+        // Fungsi saat halaman dimuat
+        window.onload = function() {
+            // Coba muat file otomatis dari server/github
+            loadDefaultFile();
+        };
+
+        // Fungsi untuk memuat file otomatis dari URL/Server
+        async function loadDefaultFile() {
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+            document.getElementById('searchInput').disabled = true;
+            
+            try {
+                // Fetch file dari URL yang sama dengan letak index.html
+                const response = await fetch(DEFAULT_FILE_URL);
+                if (!response.ok) throw new Error('File tidak ditemukan di server.');
+                
+                const arrayBuffer = await response.arrayBuffer();
+                processExcelData(arrayBuffer, 'Otomatis');
+            } catch (error) {
+                console.warn("Gagal memuat otomatis:", error);
+                // Jika gagal muat otomatis, coba dari penyimpanan lokal browser
+                const isLoaded = loadDataFromStorage();
+                if (!isLoaded) {
+                    showNotification('info', 'Silakan upload file Excel secara manual.');
+                }
+            } finally {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+            }
+        }
+
+        // Fungsi inti untuk memproses ArrayBuffer menjadi Data (digunakan Upload & Otomatis)
+        function processExcelData(arrayBuffer, source = 'Manual') {
+            try {
+                const data = new Uint8Array(arrayBuffer);
+                const workbook = XLSX.read(data, {type: 'array', cellDates: true, cellNF: false, cellText: false});
+                
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                
+                const rawJson = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false, dateNF: "yyyy-mm-dd" });
+                
+                if (rawJson.length === 0) throw new Error("File kosong atau format tidak sesuai.");
+
+                employeeData = rawJson.map(row => {
+                    let standardizedObj = {};
+                    for (let key in row) {
+                        let standardKey = key.toString().trim().toUpperCase();
+                        standardizedObj[standardKey] = row[key] ? row[key].toString().trim() : "";
+                    }
+                    return standardizedObj;
+                });
+
+                saveDataToStorage(employeeData);
+                updateDataCount();
+                
+                document.getElementById('searchInput').disabled = false;
+                document.getElementById('searchInput').value = '';
+                renderTable(employeeData);
+                
+                if (source === 'Otomatis') {
+                    showNotification('success', `Berhasil memuat ${employeeData.length.toLocaleString('id-ID')} data dari server otomatis.`);
+                } else {
+                    showNotification('success', `Berhasil memproses ${employeeData.length.toLocaleString('id-ID')} baris data.`);
+                }
+
+            } catch (error) {
+                console.error(error);
+                showNotification('error', 'Terjadi kesalahan memproses data: ' + error.message);
+            }
+        }
+
+        // Fungsi untuk mengunggah dan membaca file Excel (Fallback)
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+            document.getElementById('fileUpload').disabled = true;
+            document.getElementById('searchInput').disabled = true;
+
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                processExcelData(e.target.result, 'Manual');
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                document.getElementById('fileUpload').disabled = false;
+                document.getElementById('fileUpload').value = '';
+            };
+
+            reader.onerror = function() {
+                showNotification('error', 'Gagal membaca file dari komputer Anda.');
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                document.getElementById('fileUpload').disabled = false;
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Fungsi Pencarian
+        function handleSearch() {
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            
+            if (employeeData.length === 0) return;
+
+            if (query === "") {
+                renderTable(employeeData); // Render default jika kosong
+                return;
+            }
+
+            const filteredData = employeeData.filter(emp => {
+                // Cari berdasarkan Nama, ID NO, atau SR
+                const name = (emp['NAME'] || emp['NAMA'] || "").toLowerCase();
+                const idNo = (emp['ID NO'] || emp['ID'] || "").toLowerCase();
+                const sr = (emp['SR'] || "").toLowerCase();
+
+                return name.includes(query) || idNo.includes(query) || sr.includes(query);
+            });
+
+            renderTable(filteredData);
+        }
+
+        // Fungsi merender tabel
+        function renderTable(data) {
+            const tableBody = document.getElementById('tableBody');
+            const resultInfo = document.getElementById('resultInfo');
+            tableBody.innerHTML = ''; // Bersihkan tabel
+
+            if (data.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                            <i data-lucide="search-x" class="w-8 h-8 text-gray-400 mx-auto mb-2"></i>
+                            <p>Data tidak ditemukan.</p>
+                        </td>
+                    </tr>
+                `;
+                resultInfo.textContent = "0 hasil";
+                lucide.createIcons();
+                return;
+            }
+
+            // Batasi jumlah yang dirender untuk performa
+            const dataToRender = data.slice(0, MAX_DISPLAY_RESULTS);
+            
+            if (data.length > MAX_DISPLAY_RESULTS) {
+                resultInfo.textContent = `Menampilkan ${MAX_DISPLAY_RESULTS} dari ${data.length.toLocaleString('id-ID')} hasil`;
+            } else {
+                resultInfo.textContent = `Menampilkan ${data.length} hasil`;
+            }
+
+            // Helper untuk mengambil nilai kolom yang mungkin namanya bervariasi
+            const getValue = (row, possibleKeys) => {
+                for (let key of possibleKeys) {
+                    if (row[key] !== undefined && row[key] !== "") return row[key];
+                }
+                return "-";
+            };
+
+            dataToRender.forEach(emp => {
+                const idNo = getValue(emp, ['ID NO', 'ID', 'NIK']);
+                const sr = getValue(emp, ['SR', 'SR NO']);
+                const name = getValue(emp, ['NAME', 'NAMA']);
+                const section = getValue(emp, ['SECTION', 'SEKSI', 'DEPARTEMEN']);
+                const position = getValue(emp, ['POSITION / TITLE', 'POSITION', 'POSISI', 'TITLE']);
+                const resignDate = getValue(emp, ['RESIGNED DATE', 'TANGGAL KELUAR', 'TGL RESIGN']);
+                const reasonOut = getValue(emp, ['REASON OF OUT', 'REASON', 'ALASAN']);
+                const procedure = getValue(emp, ['PROSEDUR (SESUAI/TIDAK)', 'PROSEDUR']);
+
+                // Badges untuk prosedur
+                let procedureHtml = `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">${procedure}</span>`;
+                if (procedure.toUpperCase().includes('TIDAK SESUAI') || procedure.toUpperCase().includes('GAGAL')) {
+                    procedureHtml = `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">${procedure}</span>`;
+                } else if (procedure.toUpperCase().includes('SESUAI') || procedure === 'V') {
+                    procedureHtml = `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">${procedure}</span>`;
+                }
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 transition-colors";
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-bold text-gray-900">${idNo}</div>
+                        <div class="text-xs text-brand-600">${sr !== '-' ? 'SR: ' + sr : ''}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">${name}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm text-gray-900">${section}</div>
+                        <div class="text-xs text-gray-500">${position}</div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        ${resignDate}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title="${reasonOut}">
+                        ${reasonOut}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        ${procedureHtml}
+                    </td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        // Penyimpanan Lokal
+        function saveDataToStorage(data) {
+            try {
+                // Karena data Excel bisa puluhan ribu baris (bisa mencapai >5MB),
+                // localStorage mungkin error QuotaExceeded.
+                const jsonString = JSON.stringify(data);
+                localStorage.setItem(STORAGE_KEY, jsonString);
+            } catch (e) {
+                console.warn("Data terlalu besar untuk LocalStorage. Data hanya akan tersimpan di sesi browser ini.");
+                showNotification('info', 'File terlalu besar. Data hanya aktif di tab ini dan akan hilang jika direfresh.');
+            }
+        }
+
+        function loadDataFromStorage() {
+            try {
+                const storedData = localStorage.getItem(STORAGE_KEY);
+                if (storedData) {
+                    employeeData = JSON.parse(storedData);
+                    updateDataCount();
+                    document.getElementById('searchInput').disabled = false;
+                    renderTable(employeeData);
+                    return true;
+                }
+            } catch (e) {
+                console.error("Gagal memuat data dari storage:", e);
+                localStorage.removeItem(STORAGE_KEY);
+            }
+            return false;
+        }
+
+        function clearData() {
+            if(employeeData.length === 0) return;
+            
+            if(confirm('Apakah Anda yakin ingin menghapus data yang tersimpan dari browser ini?')) {
+                localStorage.removeItem(STORAGE_KEY);
+                employeeData = [];
+                updateDataCount();
+                document.getElementById('searchInput').disabled = true;
+                document.getElementById('searchInput').value = '';
+                
+                document.getElementById('tableBody').innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                            <div class="flex flex-col items-center justify-center">
+                                <i data-lucide="database" class="w-12 h-12 text-gray-300 mb-3"></i>
+                                <p>Data telah dihapus.</p>
+                                <p class="text-sm mt-1">Silakan upload file Excel baru.</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                document.getElementById('resultInfo').textContent = "Menunggu data...";
+                lucide.createIcons();
+                showNotification('success', 'Data berhasil dihapus dari browser.');
+            }
+        }
+
+        function updateDataCount() {
+            const countElem = document.getElementById('dataCount');
+            countElem.textContent = `${employeeData.length.toLocaleString('id-ID')} Data Tersimpan`;
+        }
+
+        // UI Notifications
+        let notifTimeout;
+        function showNotification(type, message) {
+            const notif = document.getElementById('notification');
+            const icon = document.getElementById('notifIcon');
+            const text = document.getElementById('notifText');
+
+            notif.classList.remove('hidden', 'bg-green-50', 'bg-red-50', 'bg-blue-50', 'text-green-800', 'text-red-800', 'text-blue-800');
+            icon.classList.remove('text-green-400', 'text-red-400', 'text-blue-400');
+
+            if (type === 'success') {
+                notif.classList.add('bg-green-50', 'text-green-800');
+                icon.classList.add('text-green-400');
+                icon.setAttribute('data-lucide', 'check-circle');
+            } else if (type === 'error') {
+                notif.classList.add('bg-red-50', 'text-red-800');
+                icon.classList.add('text-red-400');
+                icon.setAttribute('data-lucide', 'alert-circle');
+            } else {
+                notif.classList.add('bg-blue-50', 'text-blue-800');
+                icon.classList.add('text-blue-400');
+                icon.setAttribute('data-lucide', 'info');
+            }
+
+            text.textContent = message;
+            lucide.createIcons();
+            
+            // Fade in logic (Tailwind utility classes logic)
+            notif.style.opacity = '0';
+            notif.classList.remove('hidden');
+            setTimeout(() => notif.style.opacity = '1', 10);
+
+            clearTimeout(notifTimeout);
+            notifTimeout = setTimeout(hideNotification, 5000);
+        }
+
+        function hideNotification() {
+            const notif = document.getElementById('notification');
+            notif.style.opacity = '0';
+            setTimeout(() => notif.classList.add('hidden'), 300);
+        }
+    </script>
+</body>
+</html>
