@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pencarian Data Karyawan Keluar - PT HopLun Indonesia</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="./hoplun.png">
     <!-- Tailwind CSS untuk Styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- SheetJS untuk membaca file Excel/CSV -->
@@ -50,11 +52,9 @@
 
     <!-- Header -->
     <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
             <div class="flex items-center gap-3">
-                <div class="bg-brand-600 p-2 rounded-lg text-white">
-                    <i data-lucide="users"></i>
-                </div>
+                <img src="./hoplun.png" alt="Logo HopLun" class="h-10 sm:h-12 w-auto object-contain">
                 <div>
                     <h1 class="text-xl font-bold text-gray-900 leading-tight">Data Karyawan Keluar</h1>
                     <p class="text-sm text-gray-500">PT HopLun Indonesia</p>
@@ -68,7 +68,7 @@
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <main class="w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
         <!-- Notifikasi -->
         <div id="notification" class="hidden rounded-md p-4 mb-4 transition-all duration-300">
@@ -246,7 +246,7 @@
                 
                 if (rawJson.length === 0) throw new Error("File kosong atau format tidak sesuai.");
 
-                employeeData = rawJson.map(row => {
+                const newMappedData = rawJson.map(row => {
                     let standardizedObj = {};
                     for (let key in row) {
                         let standardKey = key.toString().trim().toUpperCase();
@@ -255,18 +255,50 @@
                     return standardizedObj;
                 });
 
+                // LOGIKA UNTUK MENAMBAH (APPEND) & MEMPERBARUI DATA
+                if (source === 'Manual' && employeeData.length > 0) {
+                    let addedCount = 0;
+                    let updatedCount = 0;
+                    
+                    newMappedData.forEach(newRow => {
+                        const newId = newRow['ID NO'] || newRow['ID'] || newRow['NIK'] || "";
+                        const newSr = newRow['SR'] || newRow['SR NO'] || "";
+                        
+                        // Cari apakah data dengan ID NO atau SR yang sama sudah ada di tabel
+                        const existingIndex = employeeData.findIndex(existingRow => {
+                            const extId = existingRow['ID NO'] || existingRow['ID'] || existingRow['NIK'] || "";
+                            const extSr = existingRow['SR'] || existingRow['SR NO'] || "";
+                            return (newId !== "" && newId === extId) || (newSr !== "" && newSr === extSr);
+                        });
+
+                        if (existingIndex !== -1) {
+                            // Update/Timpa data yang sudah ada (misal status prosedur berubah)
+                            employeeData[existingIndex] = newRow;
+                            updatedCount++;
+                        } else {
+                            // Tambahkan sebagai baris data baru
+                            employeeData.push(newRow);
+                            addedCount++;
+                        }
+                    });
+                    
+                    showNotification('success', `File diproses: ${addedCount} data baru ditambah, ${updatedCount} diperbarui.`);
+                } else {
+                    // Jika upload pertama kali atau diload otomatis dari GitHub
+                    employeeData = newMappedData;
+                    if (source === 'Otomatis') {
+                        showNotification('success', `Berhasil memuat ${employeeData.length.toLocaleString('id-ID')} data dari server.`);
+                    } else {
+                        showNotification('success', `Berhasil memproses ${employeeData.length.toLocaleString('id-ID')} baris data.`);
+                    }
+                }
+
                 saveDataToStorage(employeeData);
                 updateDataCount();
                 
                 document.getElementById('searchInput').disabled = false;
                 document.getElementById('searchInput').value = '';
                 renderTable(employeeData);
-                
-                if (source === 'Otomatis') {
-                    showNotification('success', `Berhasil memuat ${employeeData.length.toLocaleString('id-ID')} data dari server otomatis.`);
-                } else {
-                    showNotification('success', `Berhasil memproses ${employeeData.length.toLocaleString('id-ID')} baris data.`);
-                }
 
             } catch (error) {
                 console.error(error);
